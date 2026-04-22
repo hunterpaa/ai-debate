@@ -24,7 +24,7 @@ SELECTORS = {
         "response": '[data-message-author-role="assistant"] .markdown',
     },
     "deepseek": {
-        "input":    '#chat-input',
+        "input":    'textarea',
         "submit":   'button[aria-label="Send"]',
         "stop":     'button[aria-label="Stop"]',
         "response": ".ds-markdown",
@@ -123,6 +123,23 @@ async def send_message(page: Page, ai_name: str, text: str) -> None:
         raise RuntimeError(f"[{ai_name}] Campo de input não encontrado. "
                            "Verifique se está logado e a página está carregada.")
 
+    # ── DeepSeek: desativa modo Search se estiver ativo ──────────────────────
+    if ai_name == "deepseek":
+        _DS_SEARCH_SELS = [
+            'button[class*="search"][class*="active"]',
+            'div[class*="search"][class*="active"]',
+            'button[class*="SearchButton"][class*="active"]',
+        ]
+        for _ds_sel in _DS_SEARCH_SELS:
+            try:
+                _btn = page.locator(_ds_sel).first
+                if await _btn.count() > 0:
+                    await _btn.click()
+                    await asyncio.sleep(0.3)
+                    break
+            except Exception:
+                pass
+
     await inp.click()
     await asyncio.sleep(0.4)
 
@@ -133,7 +150,23 @@ async def send_message(page: Page, ai_name: str, text: str) -> None:
     await asyncio.sleep(0.2)
 
     # Digita o texto
-    if ai_name in CONTENTEDITABLE_AIS:
+    if ai_name == "deepseek":
+        # Usa page.evaluate com querySelector direto — mesmo método confirmado no console
+        await page.evaluate(
+            """(text) => {
+                const t = document.querySelector('textarea');
+                if (!t) return;
+                t.focus();
+                const setter = Object.getOwnPropertyDescriptor(
+                    HTMLTextAreaElement.prototype, 'value'
+                ).set;
+                setter.call(t, text);
+                t.dispatchEvent(new Event('input',  { bubbles: true }));
+                t.dispatchEvent(new Event('change', { bubbles: true }));
+            }""",
+            text,
+        )
+    elif ai_name in CONTENTEDITABLE_AIS:
         # Digitação humana simulada — reduz chance de bloqueio no ChatGPT
         await inp.type(text, delay=12)
     else:
@@ -141,7 +174,28 @@ async def send_message(page: Page, ai_name: str, text: str) -> None:
 
     await asyncio.sleep(0.5)
 
-    # Localiza e clica no botão de envio
+    # ── DeepSeek: tenta seletores de envio em ordem (Search muda o botão) ────
+    if ai_name == "deepseek":
+        _DS_SUBMIT_SELS = [
+            'button[aria-label="Send"]',
+            'div[role="button"][aria-label="Send"]',
+            'button:has(svg)[class*="send"]',
+        ]
+        for _ds_sub_sel in _DS_SUBMIT_SELS:
+            try:
+                _btn = page.locator(_ds_sub_sel).last
+                if await _btn.count() > 0 and await _btn.is_visible():
+                    await _btn.click()
+                    await asyncio.sleep(0.5)
+                    return
+            except Exception:
+                pass
+            await asyncio.sleep(0.3)
+        await inp.press("Enter")
+        await asyncio.sleep(0.5)
+        return
+
+    # Localiza e clica no botão de envio (ChatGPT, Gemini, Grok)
     submit_btn = await _visible_locator(
         page,
         sel["submit"],
