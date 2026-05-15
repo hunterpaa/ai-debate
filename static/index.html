@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI Debate</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:          #0a0a10;
+    --surface:     #111118;
+    --border:      #1e1e2e;
+    --text:        #e2e2f0;
+    --muted:       #666680;
+    --chatgpt:     #10a37f;
+    --deepseek:    #4d9fff;
+    --gemini:      #a855f7;
+    --perplexity:  #22c55e;
+    --qwen:        #f97316;
+    --mistral:     #06b6d4;
+    --grok:        #f43f5e;
+    --claude:      #f59e0b;
+    --radius:      12px;
+  }
+
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg); color: var(--text);
+    min-height: 100vh; line-height: 1.6;
+  }
+
+  .screen { display: none; min-height: 100vh; padding: 2rem; }
+  .screen.active { display: flex; flex-direction: column; align-items: center; }
+
+  h1 { font-size: 2rem; font-weight: 700; letter-spacing: -0.5px; }
+  h2 { font-size: 1.25rem; font-weight: 600; }
+  p  { color: var(--muted); }
+
+  /* ── Logo ── */
+  .logo { text-align: center; margin-bottom: 2rem; }
+  .logo h1 {
+    background: linear-gradient(135deg, var(--chatgpt), var(--deepseek), var(--gemini));
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+  }
+  .logo p { margin-top: 0.5rem; font-size: 0.95rem; }
+
+  /* ── Mode selector: 2 cards ── */
+  .mode-selector {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 1rem; width: 100%; max-width: 600px; margin-bottom: 1.5rem;
+  }
+  .mode-opt {
+    display: flex; flex-direction: column; align-items: center;
+    gap: 0.5rem; padding: 1.5rem 1rem;
+    background: var(--surface); border: 2px solid var(--border);
+    border-radius: var(--radius); cursor: pointer;
+    transition: all 0.18s ease; text-align: center; font-family: inherit;
+    position: relative;
+  }
+  .mode-opt:hover { transform: translateY(-2px); }
+  .mode-opt.selected { border-color: var(--deepseek); box-shadow: 0 0 18px rgba(77,159,255,0.18); }
+  .mode-opt.opt-turbo.selected { border-color: #f59e0b; box-shadow: 0 0 18px rgba(245,158,11,0.18); }
+  .mode-opt.selected::after {
+    content: '✓'; position: absolute; top: 8px; right: 10px;
+    font-size: 0.7rem; font-weight: 800; color: var(--deepseek);
+  }
+  .mode-opt.opt-turbo.selected::after { color: #f59e0b; }
+  .opt-icon { font-size: 2rem; line-height: 1; }
+  .opt-name { font-size: 0.9rem; font-weight: 700; color: var(--text); }
+  .opt-desc { font-size: 0.72rem; color: var(--muted); line-height: 1.4; }
+
+  /* ── Setup form ── */
+  .setup-form {
+    width: 100%; max-width: 600px;
+    display: flex; flex-direction: column; gap: 1rem;
+  }
+  label {
+    font-size: 0.78rem; font-weight: 600; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.05em;
+    display: block; margin-bottom: 0.4rem;
+  }
+  textarea, select {
+    width: 100%; background: var(--surface);
+    border: 1px solid var(--border); border-radius: 8px;
+    color: var(--text); font-size: 0.95rem;
+    padding: 0.75rem 1rem; font-family: inherit;
+    transition: border-color 0.15s; resize: vertical;
+  }
+  textarea:focus, select:focus { outline: none; border-color: var(--deepseek); }
+  textarea { min-height: 130px; }
+  .form-row { display: flex; gap: 1rem; align-items: flex-end; }
+  .form-row > * { flex: 1; }
+
+  /* ── Buttons ── */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem;
+    padding: 0.75rem 1.5rem; border: none; border-radius: 8px;
+    font-size: 0.95rem; font-weight: 600; font-family: inherit;
+    cursor: pointer; transition: all 0.15s ease; text-decoration: none;
+  }
+  .btn-primary { background: var(--deepseek); color: #fff; }
+  .btn-primary:hover { background: #3d8fe0; transform: translateY(-1px); }
+  .btn-primary:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+  .btn-turbo { background: linear-gradient(135deg, #f59e0b, #f97316); color: #fff; }
+  .btn-turbo:hover { opacity: 0.9; transform: translateY(-1px); }
+  .btn-turbo:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+  .btn-ghost { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+  .btn-ghost:hover { color: var(--text); border-color: var(--muted); }
+  .btn-success { background: var(--chatgpt); color: #fff; }
+  .btn-success:hover { background: #0e9070; }
+
+  /* ── Preview card (Auto mode) ── */
+  .preview-card {
+    display: none; width: 100%; max-width: 600px;
+    background: var(--surface); border: 1px solid rgba(77,159,255,0.3);
+    border-radius: var(--radius); padding: 1.25rem; margin-top: 0.5rem;
+    animation: fadeIn 0.35s ease;
+  }
+  .preview-card.visible { display: block; }
+  .preview-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 0.75rem;
+  }
+  .preview-tipo { font-size: 0.9rem; font-weight: 700; color: var(--deepseek); }
+  .preview-just { font-size: 0.8rem; color: var(--muted); margin-bottom: 0.75rem; line-height: 1.5; }
+  .preview-roles { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-bottom: 1rem; }
+  .role-pill {
+    font-size: 0.72rem; padding: 0.25rem 0.6rem;
+    border-radius: 99px; border: 1px solid var(--border);
+    background: rgba(255,255,255,0.04); white-space: nowrap;
+    max-width: 260px; overflow: hidden; text-overflow: ellipsis;
+  }
+  .role-pill.chatgpt    { color: var(--chatgpt);    border-color: rgba(16,163,127,0.4); }
+  .role-pill.deepseek   { color: var(--deepseek);   border-color: rgba(77,159,255,0.4); }
+  .role-pill.gemini     { color: var(--gemini);     border-color: rgba(168,85,247,0.4); }
+  .role-pill.perplexity { color: var(--perplexity); border-color: rgba(34,197,94,0.4); }
+  .role-pill.qwen       { color: var(--qwen);       border-color: rgba(249,115,22,0.4); }
+  .role-pill.mistral    { color: var(--mistral);    border-color: rgba(6,182,212,0.4); }
+  .role-pill.grok       { color: var(--grok);       border-color: rgba(244,63,94,0.4); }
+  .preview-actions { display: flex; gap: 0.75rem; }
+
+  /* ── Debate screen ── */
+  #debate-screen { max-width: 1200px; width: 100%; margin: 0 auto; }
+
+  .debate-header {
+    width: 100%; margin-bottom: 1.5rem;
+    display: flex; flex-direction: column; gap: 0.75rem;
+  }
+  .debate-meta { display: flex; justify-content: space-between; align-items: center; }
+  .debate-title { font-size: 1rem; font-weight: 600; color: var(--text); }
+  .round-badge {
+    font-size: 0.8rem; font-weight: 600; color: var(--muted);
+    background: var(--surface); border: 1px solid var(--border);
+    padding: 0.25rem 0.75rem; border-radius: 99px;
+  }
+  .progress-bar-wrap { height: 4px; background: var(--border); border-radius: 99px; overflow: hidden; }
+  .progress-bar-fill {
+    height: 100%; width: 0%;
+    background: linear-gradient(90deg, var(--chatgpt), var(--deepseek), var(--gemini));
+    border-radius: 99px; transition: width 0.6s ease;
+  }
+
+  /* ── Agent cards ── */
+  .agents-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 1rem; width: 100%; margin-bottom: 1rem;
+  }
+  .agent-card {
+    background: var(--surface); border: 2px solid var(--border);
+    border-radius: var(--radius); padding: 1.25rem;
+    transition: border-color 0.3s; min-height: 200px;
+    display: flex; flex-direction: column;
+  }
+  .agent-card.chatgpt    { --ai-color: var(--chatgpt); }
+  .agent-card.deepseek   { --ai-color: var(--deepseek); }
+  .agent-card.gemini     { --ai-color: var(--gemini); }
+  .agent-card.perplexity { --ai-color: var(--perplexity); }
+  .agent-card.qwen       { --ai-color: var(--qwen); }
+  .agent-card.mistral    { --ai-color: var(--mistral); }
+  .agent-card.grok       { --ai-color: var(--grok); }
+  .agent-card.thinking   { border-color: var(--ai-color); }
+  .agent-card.done       { border-color: var(--ai-color); }
+
+  .agent-header { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.75rem; }
+  .agent-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--border); transition: background 0.3s; flex-shrink: 0;
+  }
+  .agent-card.thinking .agent-dot { background: var(--ai-color); animation: pulse 1.2s infinite; }
+  .agent-card.done     .agent-dot { background: var(--ai-color); }
+  .agent-name { font-size: 0.85rem; font-weight: 700; color: var(--ai-color); text-transform: uppercase; letter-spacing: 0.08em; }
+  .agent-role { font-size: 0.72rem; color: var(--muted); }
+  .agent-body { flex: 1; }
+  .thinking-indicator { display: none; gap: 4px; align-items: center; padding: 0.5rem 0; }
+  .agent-card.thinking .thinking-indicator { display: flex; }
+  .dot-bounce {
+    width: 6px; height: 6px; border-radius: 50%; background: var(--ai-color);
+    animation: bounce 1.2s infinite;
+  }
+  .dot-bounce:nth-child(2) { animation-delay: 0.2s; }
+  .dot-bounce:nth-child(3) { animation-delay: 0.4s; }
+  .agent-text { font-size: 0.85rem; color: var(--text); line-height: 1.65; white-space: pre-wrap; overflow-y: auto; max-height: 320px; }
+
+  /* ── Compiler card ── */
+  .compiler-card {
+    width: 100%; margin-bottom: 1rem;
+    background: var(--surface); border: 2px solid var(--border);
+    border-radius: var(--radius); padding: 1.25rem;
+    transition: border-color 0.3s; display: none;
+  }
+  .compiler-card.visible { display: block; }
+  .compiler-card.active  { border-color: var(--claude); }
+  .compiler-header { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.75rem; }
+  .compiler-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--border); transition: background 0.3s; }
+  .compiler-card.active .compiler-dot { background: var(--claude); animation: pulse 1.2s infinite; }
+  .compiler-card.done   .compiler-dot { background: var(--claude); }
+  .compiler-name { font-size: 0.85rem; font-weight: 700; color: var(--claude); text-transform: uppercase; letter-spacing: 0.08em; }
+  .compiler-label { font-size: 0.72rem; color: var(--muted); }
+  .compiler-text { font-size: 0.85rem; color: var(--text); line-height: 1.65; white-space: pre-wrap; }
+
+  /* ── Status bar ── */
+  .status-bar { width: 100%; text-align: center; padding: 0.5rem; font-size: 0.8rem; color: var(--muted); font-style: italic; }
+
+  /* ── Conclusion screen ── */
+  #conclusion-screen { max-width: 900px; width: 100%; margin: 0 auto; }
+
+  .verdict-card {
+    width: 100%; margin-bottom: 1.5rem;
+    background: var(--surface); border: 2px solid var(--claude);
+    border-radius: var(--radius); padding: 2rem;
+  }
+  .verdict-header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1.25rem; }
+  .verdict-icon { font-size: 1.5rem; }
+  .verdict-title { font-size: 1.1rem; font-weight: 700; color: var(--claude); }
+  .verdict-text { font-size: 0.9rem; color: var(--text); line-height: 1.75; white-space: pre-wrap; }
+
+  .summaries-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 1rem; width: 100%; margin-bottom: 1.5rem;
+  }
+  .summary-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.25rem; }
+  .summary-name { font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 0.5rem; }
+  .summary-card.chatgpt    .summary-name { color: var(--chatgpt); }
+  .summary-card.deepseek   .summary-name { color: var(--deepseek); }
+  .summary-card.gemini     .summary-name { color: var(--gemini); }
+  .summary-card.perplexity .summary-name { color: var(--perplexity); }
+  .summary-card.qwen       .summary-name { color: var(--qwen); }
+  .summary-card.mistral    .summary-name { color: var(--mistral); }
+  .summary-card.grok       .summary-name { color: var(--grok); }
+  .summary-text { font-size: 0.82rem; color: var(--muted); line-height: 1.6; max-height: 180px; overflow-y: auto; }
+
+  .verdict-actions { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
+
+  /* ── Animations ── */
+  @keyframes pulse  { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+  @keyframes bounce { 0%, 80%, 100% { transform: translateY(0); } 40% { transform: translateY(-6px); } }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+  .fade-in { animation: fadeIn 0.4s ease forwards; }
+
+  /* ── Toast ── */
+  .toast {
+    position: fixed; bottom: 2rem; right: 2rem;
+    background: #ef4444; color: #fff;
+    padding: 1rem 1.5rem; border-radius: var(--radius);
+    font-size: 0.9rem; font-weight: 600;
+    display: none; z-index: 999; animation: fadeIn 0.3s ease;
+  }
+  .toast.visible { display: block; }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 99px; }
+
+  /* ── Loading spinner inline ── */
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<!-- ══════════════ HOME SCREEN ══════════════ -->
+<div id="setup-screen" class="screen active">
+
+  <div class="logo">
+    <h1>AI Debate</h1>
+    <p>Jogue o contexto. As IAs debatem. Claude entrega tudo mastigado.</p>
+  </div>
+
+  <!-- 2 modos -->
+  <div class="mode-selector">
+    <button class="mode-opt opt-auto selected" onclick="selectMode('auto', this)">
+      <span class="opt-icon">🎯</span>
+      <span class="opt-name">Automático</span>
+      <span class="opt-desc">Claude escolhe quais IAs participam com base no seu contexto</span>
+    </button>
+    <button class="mode-opt opt-turbo" onclick="selectMode('turbo', this)">
+      <span class="opt-icon">⚡</span>
+      <span class="opt-name">Turbo</span>
+      <span class="opt-desc">Todas as 7 IAs debatem — máximo poder de perspectivas</span>
+    </button>
+  </div>
+
+  <!-- Setup form -->
+  <div class="setup-form">
+    <div>
+      <label>Contexto — cole qualquer coisa aqui</label>
+      <textarea id="topic-input"
+        placeholder="Cole aqui: um projeto, uma decisão, um problema de negócio, código para revisar, uma ideia... Quanto mais contexto, melhor o debate."></textarea>
+    </div>
+
+    <div class="form-row">
+      <div>
+        <label>Rodadas</label>
+        <select id="rounds-select">
+          <option value="1">1 rodada</option>
+          <option value="2">2 rodadas</option>
+          <option value="3" selected>3 rodadas</option>
+          <option value="4">4 rodadas</option>
+          <option value="5">5 rodadas</option>
+        </select>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:0.5rem;justify-content:flex-end">
+        <!-- Modo auto: botão preview primeiro -->
+        <button class="btn btn-ghost" id="preview-btn" onclick="doPreview()" style="font-size:0.85rem">
+          🔍 Ver IAs selecionadas
+        </button>
+        <button class="btn btn-primary" id="start-btn" onclick="startDebate()">
+          ▶ Iniciar Debate
+        </button>
+      </div>
+    </div>
+
+    <!-- Card de preview (aparece após /api/preview) -->
+    <div class="preview-card" id="preview-card">
+      <div class="preview-header">
+        <span class="preview-tipo" id="preview-tipo">—</span>
+        <span style="font-size:0.72rem;color:var(--muted)" id="preview-count">— IAs</span>
+      </div>
+      <div class="preview-just" id="preview-just"></div>
+      <div class="preview-roles" id="preview-roles"></div>
+      <div class="preview-actions">
+        <button class="btn btn-primary" id="confirm-btn" onclick="confirmAndStart()" style="font-size:0.88rem;padding:0.6rem 1.2rem">
+          ✅ Confirmar e Iniciar
+        </button>
+        <button class="btn btn-ghost" onclick="resetPreview()" style="font-size:0.85rem;padding:0.6rem 1rem">
+          Refazer
+        </button>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ══════════════ DEBATE SCREEN ══════════════ -->
+<div id="debate-screen" class="screen" style="align-items:stretch;">
+  <div style="max-width:1200px;width:100%;margin:0 auto;display:flex;flex-direction:column;">
+
+    <div class="debate-header">
+      <div class="debate-meta">
+        <div class="debate-title" id="debate-title">—</div>
+        <div class="round-badge" id="round-badge">Iniciando...</div>
+      </div>
+      <div class="progress-bar-wrap">
+        <div class="progress-bar-fill" id="progress-fill"></div>
+      </div>
+    </div>
+
+    <div class="agents-grid" id="agents-grid"></div>
+
+    <div class="compiler-card" id="compiler-card">
+      <div class="compiler-header">
+        <div class="compiler-dot"></div>
+        <div>
+          <div class="compiler-name">Claude</div>
+          <div class="compiler-label">Compilador</div>
+        </div>
+      </div>
+      <div class="compiler-text" id="compiler-text"></div>
+    </div>
+
+    <div class="status-bar" id="status-bar">Iniciando...</div>
+  </div>
+</div>
+
+<!-- ══════════════ CONCLUSION SCREEN ══════════════ -->
+<div id="conclusion-screen" class="screen">
+
+  <div class="verdict-card fade-in">
+    <div class="verdict-header">
+      <span class="verdict-icon">⚖️</span>
+      <span class="verdict-title">Veredicto Final — Claude</span>
+    </div>
+    <div class="verdict-text" id="verdict-text"></div>
+  </div>
+
+  <div class="summaries-grid" id="summaries-grid"></div>
+
+  <div class="verdict-actions">
+    <button class="btn btn-success" onclick="saveMarkdown()">⬇ Salvar como Markdown</button>
+    <button class="btn btn-ghost" onclick="newDebate()">↩ Novo Debate</button>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────────────
+let ws             = null;
+let currentMode    = 'auto';
+let currentMarkdown = '';
+let lastResponses  = {};
+let totalRounds    = 3;
+let activeAIs      = [];
+let previewRoles   = null;  // roles confirmados via /api/preview
+
+const AI_LABELS = {
+  chatgpt: 'ChatGPT', deepseek: 'DeepSeek', gemini: 'Gemini',
+  perplexity: 'Perplexity', qwen: 'Qwen', mistral: 'Mistral', grok: 'Grok',
+};
+
+// ── Mode selection ─────────────────────────────────────────────────────────
+function selectMode(mode, el) {
+  currentMode = mode;
+  document.querySelectorAll('.mode-opt').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+
+  const previewBtn = document.getElementById('preview-btn');
+  const startBtn   = document.getElementById('start-btn');
+
+  if (mode === 'auto') {
+    previewBtn.style.display = '';
+    startBtn.textContent     = '▶ Iniciar Debate';
+    startBtn.className       = 'btn btn-primary';
+  } else {
+    previewBtn.style.display = 'none';
+    startBtn.textContent     = '⚡ Turbo — Iniciar';
+    startBtn.className       = 'btn btn-turbo';
+  }
+
+  resetPreview();
+}
+
+// ── Preview (Auto only) ────────────────────────────────────────────────────
+async function doPreview() {
+  const topic = document.getElementById('topic-input').value.trim();
+  if (!topic) { showToast('Cole o contexto antes de pré-visualizar.'); return; }
+
+  const btn = document.getElementById('preview-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Consultando Claude...';
+
+  try {
+    const res  = await fetch('/api/preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ topic, custom_context: '' }),
+    });
+    const data = await res.json();
+
+    if (data.error) { showToast(data.error); return; }
+
+    previewRoles = data.roles || {};
+    showPreviewCard(data);
+  } catch(e) {
+    showToast('Erro ao consultar: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '🔍 Ver IAs selecionadas';
+  }
+}
+
+function showPreviewCard(data) {
+  document.getElementById('preview-tipo').textContent  = data.tipo_detectado || 'Debate';
+  document.getElementById('preview-just').textContent  = data.justificativa  || '';
+  document.getElementById('preview-count').textContent = `${Object.keys(data.roles || {}).length} IAs selecionadas`;
+
+  const rolesEl = document.getElementById('preview-roles');
+  rolesEl.innerHTML = '';
+  Object.entries(data.roles || {}).forEach(([ai, role]) => {
+    const pill = document.createElement('span');
+    pill.className = `role-pill ${ai}`;
+    pill.title = role;
+    pill.textContent = `${AI_LABELS[ai] || ai}: ${role.length > 45 ? role.slice(0,45)+'…' : role}`;
+    rolesEl.appendChild(pill);
+  });
+
+  document.getElementById('preview-card').classList.add('visible');
+  document.getElementById('start-btn').style.display = 'none';
+}
+
+function resetPreview() {
+  previewRoles = null;
+  document.getElementById('preview-card').classList.remove('visible');
+  document.getElementById('start-btn').style.display = '';
+}
+
+function confirmAndStart() {
+  if (!previewRoles) return;
+  _launchDebate();
+}
+
+// ── Start ──────────────────────────────────────────────────────────────────
+function startDebate() {
+  _launchDebate();
+}
+
+function _launchDebate() {
+  const topic = document.getElementById('topic-input').value.trim();
+  if (!topic) { showToast('Cole o contexto antes de iniciar.'); return; }
+
+  totalRounds = parseInt(document.getElementById('rounds-select').value);
+
+  resetDebateUI();
+  showScreen('debate-screen');
+  document.getElementById('debate-title').textContent =
+    topic.length > 80 ? topic.slice(0, 80) + '…' : topic;
+
+  const payload = {
+    topic,
+    mode:   currentMode,
+    rounds: totalRounds,
+  };
+  if (currentMode === 'auto' && previewRoles) {
+    payload.preselected_roles = previewRoles;
+  }
+
+  connectWS(payload);
+}
+
+// ── UI helpers ─────────────────────────────────────────────────────────────
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function resetDebateUI() {
+  document.getElementById('agents-grid').innerHTML = '';
+  activeAIs     = [];
+  lastResponses = {};
+  document.getElementById('compiler-card').className = 'compiler-card';
+  document.getElementById('compiler-text').textContent = '';
+  document.getElementById('progress-fill').style.width = '0%';
+  document.getElementById('round-badge').textContent = 'Iniciando...';
+  document.getElementById('status-bar').textContent  = 'Conectando ao browser...';
+}
+
+function renderAgentCards(roles) {
+  const grid = document.getElementById('agents-grid');
+  grid.innerHTML = '';
+  activeAIs = Object.keys(roles);
+  activeAIs.forEach(ai => {
+    const card = document.createElement('div');
+    card.className = `agent-card ${ai}`;
+    card.id = `card-${ai}`;
+    card.innerHTML = `
+      <div class="agent-header">
+        <div class="agent-dot"></div>
+        <div>
+          <div class="agent-name">${AI_LABELS[ai] || ai.toUpperCase()}</div>
+          <div class="agent-role" id="role-${ai}">${roles[ai] || '—'}</div>
+        </div>
+      </div>
+      <div class="agent-body">
+        <div class="thinking-indicator">
+          <div class="dot-bounce"></div><div class="dot-bounce"></div><div class="dot-bounce"></div>
+        </div>
+        <div class="agent-text" id="text-${ai}"></div>
+      </div>`;
+    grid.appendChild(card);
+  });
+}
+
+function renderSummaryCards() {
+  const grid = document.getElementById('summaries-grid');
+  grid.innerHTML = '';
+  activeAIs.forEach(ai => {
+    const card = document.createElement('div');
+    card.className = `summary-card ${ai}`;
+    card.innerHTML = `
+      <div class="summary-name">${AI_LABELS[ai] || ai.toUpperCase()}</div>
+      <div class="summary-text">${lastResponses[ai] || '—'}</div>`;
+    grid.appendChild(card);
+  });
+}
+
+// ── WebSocket ──────────────────────────────────────────────────────────────
+async function connectWS(config) {
+  if (ws) { try { ws.close(); } catch(e) {} }
+
+  try {
+    const r = await fetch('/health');
+    if (!r.ok) throw new Error();
+  } catch(e) {
+    showScreen('setup-screen');
+    showToast('Servidor offline. Reinicie o app.');
+    return;
+  }
+
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}/ws/debate`);
+  ws.onopen    = () => ws.send(JSON.stringify(config));
+  ws.onmessage = ({ data }) => { try { handleEvent(JSON.parse(data)); } catch(e) {} };
+  ws.onerror   = () => showToast('Erro de conexão.');
+  ws.onclose   = (e) => {
+    if (e.code !== 1000 && e.code !== 1001) setStatus('Conexão encerrada.');
+  };
+}
+
+// ── Event handler ──────────────────────────────────────────────────────────
+function handleEvent(ev) {
+  switch(ev.type) {
+
+    case 'mode_detected':
+    case 'roles_assigned':
+    case 'roles_confirmed':
+    case 'debate_start':
+      if (ev.roles && Object.keys(ev.roles).length > 0) renderAgentCards(ev.roles);
+      if (ev.topic) {
+        document.getElementById('debate-title').textContent =
+          ev.topic.length > 80 ? ev.topic.slice(0,80)+'…' : ev.topic;
+      }
+      break;
+
+    case 'round_start':
+      const rnd = ev.round;
+      if (rnd === 'conclusao') {
+        document.getElementById('round-badge').textContent = 'Rodada Final';
+        document.getElementById('progress-fill').style.width = '90%';
+      } else {
+        document.getElementById('round-badge').textContent = `Rodada ${rnd} / ${totalRounds}`;
+        document.getElementById('progress-fill').style.width = `${(rnd / (totalRounds + 1)) * 85}%`;
+      }
+      activeAIs.forEach(ai => {
+        const c = document.getElementById('card-' + ai);
+        if (c) c.className = 'agent-card ' + ai;
+        const t = document.getElementById('text-' + ai);
+        if (t) t.textContent = '';
+      });
+      document.getElementById('compiler-card').classList.remove('visible','active','done');
+      break;
+
+    case 'agent_thinking':
+      const cardT = document.getElementById('card-' + ev.ai);
+      if (cardT) cardT.classList.add('thinking');
+      break;
+
+    case 'agent_done':
+      const card = document.getElementById('card-' + ev.ai);
+      if (card) { card.classList.remove('thinking'); card.classList.add('done'); }
+      const textEl = document.getElementById('text-' + ev.ai);
+      if (textEl) textEl.textContent = ev.text || '';
+      lastResponses[ev.ai] = ev.text;
+      break;
+
+    case 'synthesis_start':
+      showCompiler('Claude sintetizando...', true);
+      break;
+
+    case 'synthesis_done':
+      showCompiler(ev.text || '', false);
+      break;
+
+    case 'status':
+      setStatus(ev.message);
+      break;
+
+    case 'verdict_start':
+      document.getElementById('progress-fill').style.width = '95%';
+      setStatus('Claude gerando veredicto final...');
+      break;
+
+    case 'verdict_done':
+      document.getElementById('verdict-text').textContent = ev.text || '';
+      renderSummaryCards();
+      document.getElementById('progress-fill').style.width = '100%';
+      setStatus('✅ Debate concluído!');
+      showScreen('conclusion-screen');
+      break;
+
+    case 'debate_complete':
+      currentMarkdown = ev.markdown || '';
+      break;
+
+    case 'error':
+      showToast(ev.message || 'Erro desconhecido');
+      setStatus('❌ ' + (ev.message || 'Erro'));
+      break;
+  }
+}
+
+// ── Compiler ───────────────────────────────────────────────────────────────
+function showCompiler(text, active) {
+  const card = document.getElementById('compiler-card');
+  card.classList.add('visible');
+  card.classList.toggle('active', active);
+  card.classList.toggle('done', !active);
+  document.getElementById('compiler-text').textContent = text;
+}
+
+function setStatus(msg) {
+  document.getElementById('status-bar').textContent = msg;
+}
+
+// ── Save / New ─────────────────────────────────────────────────────────────
+function saveMarkdown() {
+  if (!currentMarkdown) { showToast('Nenhum conteúdo para salvar.'); return; }
+  const blob = new Blob([currentMarkdown], { type: 'text/markdown' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = `debate_${Date.now()}.md`; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function newDebate() {
+  currentMarkdown = ''; lastResponses = {}; previewRoles = null;
+  document.getElementById('preview-card').classList.remove('visible');
+  document.getElementById('start-btn').style.display = '';
+  showScreen('setup-screen');
+}
+
+// ── Toast ──────────────────────────────────────────────────────────────────
+let _toastTimer;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('visible');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => t.classList.remove('visible'), 4000);
+}
+
+// ── Init ───────────────────────────────────────────────────────────────────
+(async function init() {
+  // Esconde preview-btn inicialmente (modo auto já visível, mas espera o servidor)
+  for (let i = 0; i < 10; i++) {
+    try { const r = await fetch('/health'); if (r.ok) return; }
+    catch(e) {
+      if (i === 0) showToast('Aguardando servidor iniciar...');
+      await new Promise(r => setTimeout(r, 1500));
+    }
+  }
+  showToast('Servidor não respondeu. Abra o app novamente.');
+})();
+</script>
+</body>
+</html>

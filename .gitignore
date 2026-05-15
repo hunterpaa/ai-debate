@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.claude/
+config.py
+node_modules/
+package-lock.json
+memory/
+debate_memory/
+logs/
+error.log
+startup.log
